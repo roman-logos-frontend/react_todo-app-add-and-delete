@@ -6,7 +6,6 @@ import React, { useEffect, useRef, useState } from 'react';
 import { UserWarning } from './UserWarning';
 import * as todoService from './api/todos';
 import { Todo } from './types/Todo';
-import { TempTodoItem } from './components/TempTodoItem';
 import { Footer } from './components/Footer';
 import { ErrorNotification } from './components/ErrorNotification';
 import { Header } from './components/Header';
@@ -15,11 +14,11 @@ import { TodoList } from './components/TodoList';
 export const App: React.FC = () => {
   const [todos, setTodos] = useState<Todo[]>([]);
   const [tempTodo, setTempTodo] = useState<Todo | null>(null);
-  const [deletedTodoId, setDeletedTodoId] = useState<number | null>(null);
   const [titleNewTodo, setTitleNewTodo] = useState<string>('');
   const [loader, setLoader] = useState<boolean>(false);
   const [filter, setFilter] = useState<string>('all');
   const [errorMessage, setErrorMessage] = useState('');
+  const [loadingIds, setLoadingIds] = useState<number[]>([]);
   const inputRef = useRef<HTMLInputElement>(null);
 
   const deleteError = () => {
@@ -31,16 +30,20 @@ export const App: React.FC = () => {
   useEffect(() => {
     todoService
       .getTodos()
-      .then(todosFromServer => {
-        setTodos(todosFromServer);
-      })
+      .then(setTodos)
       .catch(() => {
         setErrorMessage('Unable to load todos');
         deleteError();
       });
   }, []);
 
-  function addTodo({ title, completed, userId }: Omit<Todo, 'id'>) {
+  useEffect(() => {
+    if (loader === false) {
+      inputRef.current?.focus();
+    }
+  }, [loader]);
+
+  const addTodo = ({ title, completed, userId }: Omit<Todo, 'id'>) => {
     if (title.trim() === '') {
       setErrorMessage('Title should not be empty');
       deleteError();
@@ -58,28 +61,22 @@ export const App: React.FC = () => {
       .createTodo({ title, completed, userId })
       .then(newTodo => {
         setTodos(currentTodos => [...currentTodos, newTodo]);
-        setTitleNewTodo('');
         setTempTodo(null);
+        setTitleNewTodo('');
       })
       .catch(() => {
         setErrorMessage('Unable to add a todo');
+        setTempTodo(null);
         deleteError();
       })
       .finally(() => {
         setLoader(false);
-        inputRef.current?.focus();
       });
-  }
+  };
 
-  function deleteTodo(todoId: number) {
-    const todoToDelete = todos.find(todo => todo.id === todoId);
+  const deleteTodo = (todoId: number) => {
+    setLoadingIds(prevState => [...prevState, todoId]);
 
-    if (!todoToDelete) {
-      return;
-    }
-
-    setTempTodo(todoToDelete);
-    setDeletedTodoId(todoId);
     setLoader(true);
 
     todoService
@@ -88,37 +85,60 @@ export const App: React.FC = () => {
         setTodos(currentTodos =>
           currentTodos.filter(todo => todo.id !== todoId),
         );
-        setTempTodo(null);
-        setDeletedTodoId(null);
       })
       .catch(() => {
         setErrorMessage('Unable to delete a todo');
         deleteError();
-        setTempTodo(null);
       })
       .finally(() => {
         setLoader(false);
-        inputRef.current?.focus();
+        setLoadingIds(prevState => prevState.filter(id => id != todoId));
       });
-  }
+  };
 
-  function deleteCompletedTodos() {
+  const deleteCompletedTodos = () => {
     const completedTodos = todos.filter(todo => todo.completed);
+    const completedTodoIds = completedTodos.map(todo => todo.id);
 
     setLoader(true);
-    Promise.all(completedTodos.map(todo => todoService.deleteTodo(todo.id)))
-      .then(() => {
-        setTodos(currentTodos => currentTodos.filter(todo => !todo.completed));
-      })
-      .catch(() => {
-        setErrorMessage('Unable to delete a todo');
-        deleteError();
+
+    setLoadingIds(prevState => [...prevState, ...completedTodoIds]);
+
+    Promise.allSettled(
+      completedTodos.map(todo => todoService.deleteTodo(todo.id)),
+    )
+      .then(results => {
+        const successfullyDeletedIds = results
+          .filter(result => result.status === 'fulfilled')
+          .map((_, index) => completedTodos[index].id);
+
+        const failedDeletions = results
+          .filter(result => result.status === 'rejected')
+          .map((_, index) => completedTodos[index].id);
+
+        if (failedDeletions.length > 0) {
+          setErrorMessage('Unable to delete a todo');
+          deleteError();
+        }
+
+        setTodos(currentTodos =>
+          currentTodos.filter(
+            todo => !successfullyDeletedIds.includes(todo.id),
+          ),
+        );
+
+        setLoadingIds(prevState =>
+          prevState.filter(id => !successfullyDeletedIds.includes(id)),
+        );
       })
       .finally(() => {
         setLoader(false);
-        inputRef.current?.focus();
+
+        setLoadingIds(prevState =>
+          prevState.filter(id => !completedTodoIds.includes(id)),
+        );
       });
-  }
+  };
 
   const handleTitleChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     setTitleNewTodo(event.target.value);
@@ -127,7 +147,7 @@ export const App: React.FC = () => {
   const handleSubmit = (event: React.FormEvent) => {
     event.preventDefault();
     addTodo({
-      title: titleNewTodo,
+      title: titleNewTodo.trim(),
       completed: false,
       userId: todoService.USER_ID,
     });
@@ -165,22 +185,15 @@ export const App: React.FC = () => {
           inputRef={inputRef}
         />
 
-        {filteredTodos.map(todo => (
-          <TodoList
-            key={todo.id}
-            todo={todo}
-            loader={loader}
-            deleteTodo={deleteTodo}
-          />
-        ))}
+        <TodoList
+          loadingIds={loadingIds}
+          filteredTodos={filteredTodos}
+          loader={loader}
+          deleteTodo={deleteTodo}
+          tempTodo={tempTodo}
+        />
 
-        {tempTodo && deletedTodoId === null && (
-          <section className="todoapp__main">
-            <TempTodoItem todo={tempTodo} loader={loader} />
-          </section>
-        )}
-
-        {todos.length > 0 && (
+        {!!todos.length && (
           <Footer
             todos={todos}
             todosCount={todos.filter(todo => !todo.completed).length}

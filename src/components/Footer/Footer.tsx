@@ -1,6 +1,7 @@
 import React from 'react';
 import { Todo } from '../../types/Todo';
 import { FilterStatus } from '../../types/filterStatus';
+import classNames from 'classnames';
 
 type Props = {
   todos: Todo[];
@@ -24,30 +25,19 @@ export const Footer: React.FC<Props> = ({
       </span>
 
       <nav className="filter" data-cy="Filter">
-        <a
-          data-cy="FilterLinkAll"
-          href="#/"
-          className={`filter__link ${filter === FilterStatus.All ? 'selected' : ''}`}
-          onClick={() => setFilter('all')}
-        >
-          All
-        </a>
-        <a
-          data-cy="FilterLinkActive"
-          href="#/active"
-          className={`filter__link ${filter === FilterStatus.Active ? 'selected' : ''}`}
-          onClick={() => setFilter('active')}
-        >
-          Active
-        </a>
-        <a
-          data-cy="FilterLinkCompleted"
-          href="#/completed"
-          className={`filter__link ${filter === FilterStatus.Completed ? 'selected' : ''}`}
-          onClick={() => setFilter('completed')}
-        >
-          Completed
-        </a>
+        {Object.values(FilterStatus).map(status => (
+          <a
+            key={status}
+            data-cy={`FilterLink${status.charAt(0).toUpperCase() + status.slice(1)}`}
+            href={`#/${status}`}
+            className={classNames('filter__link', {
+              selected: filter === status,
+            })}
+            onClick={() => setFilter(status)}
+          >
+            {status.charAt(0).toUpperCase() + status.slice(1)}
+          </a>
+        ))}
       </nav>
 
       <button

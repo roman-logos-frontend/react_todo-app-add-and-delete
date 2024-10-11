@@ -4,23 +4,22 @@ import { Todo } from '../../types/Todo';
 
 interface TempTodoItemProps {
   todo: Todo;
-  loader: boolean;
 }
 
-export const TempTodoItem: React.FC<TempTodoItemProps> = ({ todo, loader }) => (
-  <div className={`todo ${todo.completed ? 'completed' : ''}`}>
+export const TempTodoItem: React.FC<TempTodoItemProps> = ({ todo }) => (
+  <div data-cy="Todo" className="todo">
     <label className="todo__status-label">
       <input
         data-cy="TodoStatus"
         type="checkbox"
         className="todo__status"
-        checked={todo.completed}
-        readOnly
+        checked={todo?.completed}
+        disabled
       />
     </label>
 
     <span data-cy="TodoTitle" className="todo__title">
-      {todo.title}
+      {todo?.title}
     </span>
 
     <button
@@ -32,10 +31,7 @@ export const TempTodoItem: React.FC<TempTodoItemProps> = ({ todo, loader }) => (
       ×
     </button>
 
-    <div
-      data-cy="TodoLoader"
-      className={`modal overlay ${loader ? 'is-active' : ''}`}
-    >
+    <div data-cy="TodoLoader" className="modal overlay is-active">
       <div className="modal-background has-background-white-ter" />
       <div className="loader" />
     </div>
